@@ -3,15 +3,15 @@
 from typing import List
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage
+from langgraph.prebuilt import create_react_agent
 
 
 def create_simple_agent(
     tools: List[BaseTool],
     model_name: str = "gpt-4o-mini",
     temperature: float = 0.0
-) -> AgentExecutor:
+):
     """Create a simple agent with tool calling capabilities.
     
     Args:
@@ -20,41 +20,37 @@ def create_simple_agent(
         temperature: Temperature for the model
         
     Returns:
-        AgentExecutor ready to run
+        Compiled agent graph ready to run
     """
     # Create the LLM
     llm = ChatOpenAI(model=model_name, temperature=temperature)
     
-    # Create a prompt template
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a helpful assistant. Use the available tools to answer questions."),
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ])
-    
-    # Create the agent
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    
-    # Create the agent executor
-    agent_executor = AgentExecutor(
-        agent=agent,
+    # Create the agent using LangGraph's prebuilt create_react_agent
+    agent = create_react_agent(
+        model=llm,
         tools=tools,
-        verbose=True,
-        handle_parsing_errors=True
+        state_modifier="You are a helpful assistant. Use the available tools to answer questions."
     )
     
-    return agent_executor
+    return agent
 
 
-def run_simple_agent(agent_executor: AgentExecutor, query: str) -> str:
+def run_simple_agent(agent, query: str) -> str:
     """Run the agent with a query.
     
     Args:
-        agent_executor: The agent executor
+        agent: The agent executor
         query: The query to process
         
     Returns:
         The agent's response
     """
-    result = agent_executor.invoke({"input": query})
-    return result["output"]
+    # Create messages
+    messages = [HumanMessage(content=query)]
+    
+    # Run the agent
+    result = agent.invoke({"messages": messages})
+    
+    # Extract the final response
+    final_message = result["messages"][-1]
+    return final_message.content
