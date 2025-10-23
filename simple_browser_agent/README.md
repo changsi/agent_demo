@@ -1,6 +1,6 @@
 # Browser Agent with LangGraph
 
-A **production-ready** browser automation agent built with LangGraph, demonstrating autonomous web navigation with LLM decision-making and modern web support (Shadow DOM).
+A **production-ready** browser automation agent built with LangGraph, demonstrating autonomous web navigation with LLM decision-making and modern web support.
 
 ## 🎯 What is This?
 
@@ -156,13 +156,12 @@ The browser agent follows a classic **agent-environment loop** where the agent i
 
 ```
 simple_browser_agent/
-├── agent.py           # LangGraph agent (500 lines)
-├── tools.py           # 8 browser tools (428 lines)
-├── browser.py         # CDP browser control (735 lines)
-├── models.py          # Pydantic models (70 lines)
-├── prompts.py         # System prompt (103 lines)
-├── demo_costco.py     # Demo script
-├── __init__.py        # Module init
+├── agent.py           # LangGraph agent (523 lines)
+├── tools.py           # 8 browser tools (426 lines)
+├── browser.py         # CDP browser control (734 lines)
+├── models.py          # Pydantic models (58 lines)
+├── prompts.py         # System prompt (102 lines)
+├── demo_costco.py     # Demo script (129 lines)
+├── __init__.py        # Module init (30 lines)
 ├── README.md          # This file
-└── CHANGELOG.md       # Recent changes
 
