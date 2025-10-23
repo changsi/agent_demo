@@ -29,30 +29,24 @@ logging.basicConfig(
 async def main():
     """Run Costco shopping demo with Azure OpenAI"""
     
-    # ============================================================
-    # CONFIGURATION - Load from environment variables
-    # ============================================================
+    # Validate environment variables are set
+    # (Agent will do this too, but check early for better error messages)
+    required_vars = [
+        "AZURE_OPENAI_ENDPOINT",
+        "AZURE_OPENAI_API_KEY"
+    ]
+    missing = [var for var in required_vars if not os.getenv(var)]
+    if missing:
+        raise ValueError(
+            f"Missing required environment variables: {', '.join(missing)}\n"
+            "Please create a .env file with your Azure OpenAI credentials.\n"
+            "See env.example for a template."
+        )
     
-    azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-    api_key = os.getenv("AZURE_OPENAI_API_KEY")
-    api_version = os.getenv(
-        "OPENAI_API_VERSION", "2024-12-01-preview"
-    )
+    # Get configuration for display purposes only
     deployment_name = os.getenv(
         "AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "gpt-4o-mini"
     )
-    
-    # Validate required credentials
-    if not azure_endpoint or not api_key:
-        raise ValueError(
-            "Missing required environment variables!\n"
-            "Please create a .env file in the project root with:\n"
-            "  AZURE_OPENAI_ENDPOINT=your-endpoint\n"
-            "  AZURE_OPENAI_API_KEY=your-api-key\n"
-            "  OPENAI_API_VERSION=2024-12-01-preview\n"
-            "  AZURE_OPENAI_CHAT_DEPLOYMENT_NAME=gpt-4o-mini\n"
-            "\nSee env.example for a template."
-        )
     
     # ============================================================
     # TASK - Grocery shopping with delivery
@@ -102,15 +96,11 @@ Be persistent and complete the shopping order!"""
     print(f"\nUsing: LangGraph + Azure OpenAI ({deployment_name})")
     print("="*70 + "\n")
     
-    # Create the LangGraph agent (LLM created internally)
+    # Create the LangGraph agent (loads credentials from env internally)
     agent = LangGraphBrowserAgent(
         task=task,
-        model=deployment_name,
         headless=False,  # Set to True to hide browser window
-        max_steps=50,  # Increased for complex shopping task
-        api_version=api_version,
-        azure_endpoint=azure_endpoint,
-        api_key=api_key
+        max_steps=50  # Increased for complex shopping task
     )
     
     # ============================================================

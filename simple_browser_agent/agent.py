@@ -14,9 +14,9 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-from .browser import SimpleBrowserSession
-from .tools import create_browser_tools
-from .prompts import SYSTEM_PROMPT
+from browser import SimpleBrowserSession
+from tools import create_browser_tools
+from prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -390,24 +390,51 @@ class LangGraphBrowserAgent:
     Convenience wrapper for the LangGraph browser agent.
     
     Provides a simple interface for running browser automation tasks.
+    Automatically loads Azure OpenAI credentials from environment variables.
     """
     
     def __init__(
         self,
         task: str,
-        model: str = "gpt-4o-mini",
         headless: bool = False,
-        max_steps: int = 30,
-        api_version: str = "2024-12-01-preview",
-        azure_endpoint: str = None,
-        api_key: str = None
+        max_steps: int = 30
     ):
+        """
+        Initialize the browser agent.
+        
+        Args:
+            task: The task description for the agent to complete
+            headless: Whether to run browser in headless mode
+            max_steps: Maximum number of steps before stopping
+            
+        Environment Variables Required:
+            AZURE_OPENAI_ENDPOINT: Azure OpenAI endpoint URL
+            AZURE_OPENAI_API_KEY: Azure OpenAI API key
+            OPENAI_API_VERSION: API version (default: 2024-12-01-preview)
+            AZURE_OPENAI_CHAT_DEPLOYMENT_NAME: Deployment name (default: gpt-4o-mini)
+        """
+        import os
+        
         self.task = task
-        self.model = model
         self.max_steps = max_steps
-        self.api_version = api_version
-        self.azure_endpoint = azure_endpoint
-        self.api_key = api_key
+        
+        # Load credentials from environment
+        self.azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+        self.api_key = os.getenv("AZURE_OPENAI_API_KEY")
+        self.api_version = os.getenv(
+            "OPENAI_API_VERSION", "2024-12-01-preview"
+        )
+        self.model = os.getenv(
+            "AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "gpt-4o-mini"
+        )
+        
+        # Validate required credentials
+        if not self.azure_endpoint or not self.api_key:
+            raise ValueError(
+                "Missing required environment variables!\n"
+                "Please set AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY\n"
+                "in your .env file or environment."
+            )
         
         # Initialize browser
         self.browser = SimpleBrowserSession(headless=headless)
