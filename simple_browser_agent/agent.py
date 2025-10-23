@@ -299,7 +299,6 @@ Result: {item['result_summary']}
 
 def create_browser_agent_graph(
     browser: SimpleBrowserSession,
-    llm_client,
     model: str = "gpt-4o-mini",
     api_version: str = "2024-12-01-preview",
     azure_endpoint: str = None,
@@ -310,7 +309,6 @@ def create_browser_agent_graph(
     
     Args:
         browser: SimpleBrowserSession instance
-        llm_client: Azure OpenAI async client
         model: Model/deployment name
         api_version: Azure API version
         azure_endpoint: Azure endpoint URL
@@ -321,19 +319,22 @@ def create_browser_agent_graph(
     """
     logger.info("🏗️ Building LangGraph browser agent...")
     
-    # Create browser tools
-    browser_tools = create_browser_tools(browser, llm_client, model)
-    logger.info(f"✅ Created {len(browser_tools)} browser tools")
-    
-    # Create LLM with tools
+    # Create single LLM client for both vision and planning
     llm = AzureChatOpenAI(
         api_key=api_key,
         api_version=api_version,
         azure_deployment=model,
         azure_endpoint=azure_endpoint
     )
+    logger.info(f"✅ LLM client configured: {model}")
+    
+    # Create browser tools (using the same LLM)
+    browser_tools = create_browser_tools(browser, llm, model)
+    logger.info(f"✅ Created {len(browser_tools)} browser tools")
+    
+    # Bind tools to LLM for planning
     llm_with_tools = llm.bind_tools(browser_tools)
-    logger.info(f"✅ LLM configured with tools")
+    logger.info("✅ LLM configured with tools")
     
     # Create ToolNode for action execution
     action_node = ToolNode(browser_tools)
@@ -388,13 +389,12 @@ class LangGraphBrowserAgent:
     """
     Convenience wrapper for the LangGraph browser agent.
     
-    Provides a simple interface similar to the original SimpleBrowserAgent.
+    Provides a simple interface for running browser automation tasks.
     """
     
     def __init__(
         self,
         task: str,
-        llm_client,
         model: str = "gpt-4o-mini",
         headless: bool = False,
         max_steps: int = 30,
@@ -403,7 +403,6 @@ class LangGraphBrowserAgent:
         api_key: str = None
     ):
         self.task = task
-        self.llm_client = llm_client
         self.model = model
         self.max_steps = max_steps
         self.api_version = api_version
@@ -427,10 +426,9 @@ class LangGraphBrowserAgent:
         await self.browser.start()
         
         try:
-            # Create graph
+            # Create graph (LLM is created internally)
             self.graph = create_browser_agent_graph(
                 self.browser,
-                self.llm_client,
                 self.model,
                 self.api_version,
                 self.azure_endpoint,

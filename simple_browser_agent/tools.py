@@ -11,13 +11,13 @@ from langchain_core.tools import tool
 logger = logging.getLogger(__name__)
 
 
-def create_browser_tools(browser, llm_client, model: str = "gpt-4o-mini"):
+def create_browser_tools(browser, llm, model: str = "gpt-4o-mini"):
     """
     Create all browser tools with browser and LLM context injected via closure.
     
     Args:
         browser: SimpleBrowserSession instance
-        llm_client: OpenAI/Azure OpenAI async client
+        llm: LangChain AzureChatOpenAI client
         model: Model name for LLM operations
         
     Returns:
@@ -237,17 +237,16 @@ Page content:
 
 Provide a concise answer based only on the page content. If the information is not available, say so."""
 
+            # Use LangChain invoke API
+            from langchain_core.messages import SystemMessage, HumanMessage
+            
             messages = [
-                {"role": "system", "content": "You are a helpful assistant that extracts information from web pages."},
-                {"role": "user", "content": prompt}
+                SystemMessage(content="You are a helpful assistant that extracts information from web pages."),
+                HumanMessage(content=prompt)
             ]
             
-            response = await llm_client.chat.completions.create(
-                model=model,
-                messages=messages
-            )
-            
-            extracted = response.choices[0].message.content
+            response = await llm.ainvoke(messages)
+            extracted = response.content
             
             return f"✅ Extracted: {extracted}"
         except Exception as e:
@@ -402,7 +401,7 @@ async def test_tools():
         logger.info(f"URL: {state['url']}")
         logger.info(f"Title: {state['title']}")
         elements = state['elements'].split('\n')[:10]  # First 10 elements
-        logger.info(f"First 10 elements:")
+        logger.info("First 10 elements:")
         for elem in elements:
             logger.info(f"  {elem}")
         

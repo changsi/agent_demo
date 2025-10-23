@@ -11,7 +11,6 @@ import logging
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from openai import AsyncAzureOpenAI
 
 from agent import LangGraphBrowserAgent
 
@@ -96,13 +95,6 @@ Be persistent and complete the shopping order!"""
     # AGENT SETUP
     # ============================================================
     
-    # Initialize Azure OpenAI client
-    client = AsyncAzureOpenAI(
-        api_key=api_key,
-        api_version=api_version,
-        azure_endpoint=azure_endpoint
-    )
-    
     print("\n" + "="*70)
     print("COSTCO SHOPPING AGENT DEMO (LangGraph)")
     print("="*70)
@@ -110,10 +102,9 @@ Be persistent and complete the shopping order!"""
     print(f"\nUsing: LangGraph + Azure OpenAI ({deployment_name})")
     print("="*70 + "\n")
     
-    # Create the LangGraph agent
+    # Create the LangGraph agent (LLM created internally)
     agent = LangGraphBrowserAgent(
         task=task,
-        llm_client=client,
         model=deployment_name,
         headless=False,  # Set to True to hide browser window
         max_steps=50,  # Increased for complex shopping task
