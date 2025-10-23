@@ -122,28 +122,28 @@ graph_builder = StateGraph(AgentState)
 
 # Add the two nodes to the graph
 graph_builder.add_node("observe_and_planning", observe_and_plan)
-graph_builder.add_node("tools", tool_node)
+graph_builder.add_node("action", tool_node)  # Execute actions (tool calls)
 
 # The entry point is the "observe_and_planning" node
 graph_builder.set_entry_point("observe_and_planning")
 
 # This conditional edge routes the flow *after* the "observe_and_planning" node runs.
 # It checks the last message (the AIMessage from `observe_and_plan`):
-# - If it contains tool calls, it routes to the "tools" node.
+# - If it contains tool calls, it routes to the "action" node.
 # - Otherwise, it routes to END, finishing the graph execution.
 graph_builder.add_conditional_edges(
     "observe_and_planning",
     tools_condition,  # This is a prebuilt function
     {
-        "tools": "tools",  # Route to "tools" node if tool calls are present
+        "tools": "action",  # Route to "action" node if tool calls are present
         END: END,  # Otherwise, end the flow
     },
 )
 
-# This edge routes the flow *after* the "tools" node runs.
-# The output of the tools (ToolMessages) is sent back to the "observe_and_planning" node
+# This edge routes the flow *after* the "action" node runs.
+# The output of the actions (ToolMessages) is sent back to the "observe_and_planning" node
 # so the LLM can process the tool results and generate a final answer.
-graph_builder.add_edge("tools", "observe_and_planning")
+graph_builder.add_edge("action", "observe_and_planning")
 
 # Compile the state graph into a runnable graph
 graph = graph_builder.compile()

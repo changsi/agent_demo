@@ -14,14 +14,14 @@ The chat agent:
 ## 🏗️ Architecture
 
 The agent uses a state graph with two main nodes:
-- **Agent Node**: Calls Azure OpenAI to decide the next action
-- **Tool Node**: Executes the requested tools
+- **Observe & Planning Node**: Analyzes the current state and decides the next action
+- **Action Node**: Executes the requested tools/actions
 
 ### Flow Diagram:
 ```
-User Input → Agent (LLM) → Tool Call? 
-                          ├─ Yes → Execute Tool → Agent (LLM) → Response
-                          └─ No → Direct Response
+User Input → Observe & Planning (LLM) → Action Needed? 
+                                      ├─ Yes → Execute Action → Observe & Planning (LLM) → Response
+                                      └─ No → Direct Response
 ```
 
 ## 🚀 How to Run
@@ -53,13 +53,13 @@ python chat_agent/chat_agent_demo.py
 
 User: "What is the weather in San Francisco?"
 
---- Calling Azure OpenAI Model ---
+--- Observing & Planning (Calling LLM) ---
 Agent → Decides to call get_weather tool
 
 --- Calling get_weather tool for San Francisco ---
-Tool → Returns: {"city": "San Francisco", "temperature": "15°C", "conditions": "Foggy"}
+Action → Returns: {"city": "San Francisco", "temperature": "15°C", "conditions": "Foggy"}
 
---- Calling Azure OpenAI Model ---
+--- Observing & Planning (Calling LLM) ---
 Agent → "Right now in San Francisco it's 15°C (59°F) and foggy. 
          Expect reduced visibility — a light jacket or layers are recommended."
 ```
@@ -70,7 +70,7 @@ Agent → "Right now in San Francisco it's 15°C (59°F) and foggy.
 
 User: "Hi, my name is Bob."
 
---- Calling Azure OpenAI Model ---
+--- Observing & Planning (Calling LLM) ---
 Agent → "Hi Bob — nice to meet you! How can I help you today?"
 ```
 
@@ -111,14 +111,14 @@ class AgentState(TypedDict):
 
 ```python
 graph_builder = StateGraph(AgentState)
-graph_builder.add_node("agent", call_model)
-graph_builder.add_node("tools", tool_node)
-graph_builder.add_conditional_edges("agent", tools_condition)
-graph_builder.add_edge("tools", "agent")
+graph_builder.add_node("observe_and_planning", observe_and_plan)
+graph_builder.add_node("action", tool_node)
+graph_builder.add_conditional_edges("observe_and_planning", tools_condition)
+graph_builder.add_edge("action", "observe_and_planning")
 ```
 
-- **Conditional edges**: Routes to tools if LLM decides to call them
-- **Loop back**: Tool results go back to agent for final response
+- **Conditional edges**: Routes to action node if LLM decides to call tools
+- **Loop back**: Action results go back to observe_and_planning for final response
 
 ## 📝 Customizing the Demo
 
