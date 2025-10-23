@@ -99,13 +99,17 @@ tool_node = ToolNode(tools)
 
 # --- 5. Define Graph Nodes ---
 
-# This node represents the "agent" itself. It calls the LLM.
-def call_model(state: AgentState) -> dict:
+# This node handles observation and planning. It calls the LLM to analyze
+# the current state (messages) and plan the next action.
+def observe_and_plan(state: AgentState) -> dict:
     """
-    The primary node that calls the Azure OpenAI model.
-    The model will either respond directly or issue a tool call.
+    Observe the current conversation state and plan the next action.
+    
+    The model analyzes the messages and decides to either:
+    - Respond directly with an answer, or
+    - Issue a tool call to gather more information
     """
-    print("--- Calling Azure OpenAI Model ---")
+    print("--- Observing & Planning (Calling LLM) ---")
     messages = state["messages"]
     response = llm_with_tools.invoke(messages)
     # The response (an AIMessage) is added to the state
@@ -117,18 +121,18 @@ print("Constructing LangGraph agent...")
 graph_builder = StateGraph(AgentState)
 
 # Add the two nodes to the graph
-graph_builder.add_node("agent", call_model)
+graph_builder.add_node("observe_and_planning", observe_and_plan)
 graph_builder.add_node("tools", tool_node)
 
-# The entry point is the "agent" node
-graph_builder.set_entry_point("agent")
+# The entry point is the "observe_and_planning" node
+graph_builder.set_entry_point("observe_and_planning")
 
-# This conditional edge routes the flow *after* the "agent" node runs.
-# It checks the last message (the AIMessage from `call_model`):
+# This conditional edge routes the flow *after* the "observe_and_planning" node runs.
+# It checks the last message (the AIMessage from `observe_and_plan`):
 # - If it contains tool calls, it routes to the "tools" node.
 # - Otherwise, it routes to END, finishing the graph execution.
 graph_builder.add_conditional_edges(
-    "agent",
+    "observe_and_planning",
     tools_condition,  # This is a prebuilt function
     {
         "tools": "tools",  # Route to "tools" node if tool calls are present
@@ -137,9 +141,9 @@ graph_builder.add_conditional_edges(
 )
 
 # This edge routes the flow *after* the "tools" node runs.
-# The output of the tools (ToolMessages) is sent back to the "agent" node
+# The output of the tools (ToolMessages) is sent back to the "observe_and_planning" node
 # so the LLM can process the tool results and generate a final answer.
-graph_builder.add_edge("tools", "agent")
+graph_builder.add_edge("tools", "observe_and_planning")
 
 # Compile the state graph into a runnable graph
 graph = graph_builder.compile()
