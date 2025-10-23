@@ -8,7 +8,6 @@ A LangGraph-based browser agent that autonomously navigates websites, interacts 
 
 - **State Graph Architecture** - Clean node-based execution flow
 - **Native Tool Calling** - LangGraph `@tool` decorator for actions
-- **Shadow DOM Support** - Penetrates modern web components  
 - **Rich Feedback** - Navigation detection, action results
 - **Automatic State Management** - No manual tracking needed
 - **Vision Support** - Screenshots sent to LLM for better perception
@@ -17,10 +16,8 @@ A LangGraph-based browser agent that autonomously navigates websites, interacts 
 
 ✅ **Modern Web Support** - Shadow DOM traversal, dynamic content  
 ✅ **8 Browser Tools** - Navigate, click, input, extract, scroll, keys, screenshot, done  
-✅ **Smart Click Detection** - Knows when page navigated, modal appeared, cart updated  
 ✅ **History Tracking** - Structured memory of actions and results  
 ✅ **Graph Visualization** - Built-in flow visualization  
-✅ **Checkpointing Ready** - Save/resume long-running tasks  
 
 ---
 
