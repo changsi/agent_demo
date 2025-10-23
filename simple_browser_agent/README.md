@@ -35,12 +35,16 @@ source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Configure API credentials
+cp env.example .env
+# Edit .env and add your Azure OpenAI credentials
 ```
 
 ### Run the Demo
 
 ```bash
-# Update Azure OpenAI credentials in demo_costco.py first!
+# Demo will automatically load credentials from .env
 python3 simple_browser_agent/demo_costco.py
 ```
 

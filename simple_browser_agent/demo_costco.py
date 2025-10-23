@@ -2,15 +2,23 @@
 Costco Shopping Agent Demo - Browser Agent with LangGraph
 
 This demo shows the LangGraph-based browser agent shopping at Costco.com.
-Update the Azure OpenAI credentials below before running.
+Create a .env file with your Azure OpenAI credentials before running.
 
 Task: Find and report the price of a specific product at Costco.
 """
 import asyncio
 import logging
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 from openai import AsyncAzureOpenAI
 
 from agent import LangGraphBrowserAgent
+
+# Load environment variables from .env file
+# Look for .env in project root (parent directory)
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # Set up logging
 logging.basicConfig(
@@ -23,19 +31,36 @@ async def main():
     """Run Costco shopping demo with Azure OpenAI"""
     
     # ============================================================
-    # CONFIGURATION - Update these with your credentials
+    # CONFIGURATION - Load from environment variables
     # ============================================================
     
-    azure_endpoint = "https://your-endpoint.openai.azure.com/"  # UPDATE THIS
-    api_key = "your-api-key-here"  # UPDATE THIS
-    api_version = "2024-12-01-preview"
-    deployment_name = "gpt-4o-mini"  # Or your deployment name
+    azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    api_version = os.getenv(
+        "OPENAI_API_VERSION", "2024-12-01-preview"
+    )
+    deployment_name = os.getenv(
+        "AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "gpt-4o-mini"
+    )
+    
+    # Validate required credentials
+    if not azure_endpoint or not api_key:
+        raise ValueError(
+            "Missing required environment variables!\n"
+            "Please create a .env file in the project root with:\n"
+            "  AZURE_OPENAI_ENDPOINT=your-endpoint\n"
+            "  AZURE_OPENAI_API_KEY=your-api-key\n"
+            "  OPENAI_API_VERSION=2024-12-01-preview\n"
+            "  AZURE_OPENAI_CHAT_DEPLOYMENT_NAME=gpt-4o-mini\n"
+            "\nSee env.example for a template."
+        )
     
     # ============================================================
     # TASK - Grocery shopping with delivery
     # ============================================================
     
-    task = """Complete a Costco grocery shopping order with the following items:
+    task = """Complete a Costco grocery shopping order with the \
+following items:
 
 SHOPPING LIST:
 1. Paper towels
@@ -53,7 +78,8 @@ STEPS TO COMPLETE:
    - Press Enter or click the search button to search
    - Find and click on the first product in the results
    - Click "Add to Cart" button to add it to cart
-   - Navigate back to search for the next item (use browser back or go to homepage)
+   - Navigate back to search for the next item (use browser back \
+or go to homepage)
 
 2. After adding all 4 items:
    - Go to cart (click cart icon or navigate to cart page)
@@ -61,7 +87,8 @@ STEPS TO COMPLETE:
    - Proceed to checkout if possible
    - Enter delivery address: 830 Birch Ave, Sunnyvale, CA 94086
    - Enter recipient name: Si Chang
-   - Complete as much of checkout as possible (may require sign-in)
+   - Complete as much of checkout as possible (may require \
+sign-in)
 
 Be persistent and complete the shopping order!"""
     
@@ -89,7 +116,7 @@ Be persistent and complete the shopping order!"""
         llm_client=client,
         model=deployment_name,
         headless=False,  # Set to True to hide browser window
-        max_steps=50,    # Increased for complex shopping task with 4 items + checkout
+        max_steps=50,  # Increased for complex shopping task
         api_version=api_version,
         azure_endpoint=azure_endpoint,
         api_key=api_key
