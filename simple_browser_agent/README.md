@@ -61,29 +61,85 @@ Step 5/50: click → ✅ Clicked element 42 → Page navigated
 
 ## 🏗️ Architecture
 
-### Graph Structure
+### High-Level: Agent-Environment Interaction
+
+The browser agent follows a classic **agent-environment loop** where the agent interacts with a web browser environment:
 
 ```
-START → observe_browser → agent_decide → [done?]
-                                           ├─ Yes → END
-                                           └─ No → tools → update_history → loop back
+┌─────────────────────────────────────────────────────────────┐
+│                    AGENT-ENVIRONMENT LOOP                    │
+└─────────────────────────────────────────────────────────────┘
+
+    ┌──────────────┐                      ┌──────────────┐
+    │    AGENT     │                      │ ENVIRONMENT  │
+    │   (LLM +     │                      │  (Browser)   │
+    │  LangGraph)  │                      │              │
+    └──────┬───────┘                      └──────▲───────┘
+           │                                     │
+           │ 1. Observe                          │
+           │    - Screenshot                     │
+           │    - URL, Title                     │
+           │    - Interactive Elements           │
+           │────────────────────────────────────►│
+           │                                     │
+           │ 2. Plan                              │
+           │    - LLM analyzes state             │
+           │    - Decides next action            │
+           │    (e.g., "click element 5")        │
+           │                                     │
+           │ 3. Act                               │
+           │    - Execute action                 │
+           │────────────────────────────────────►│
+           │                                     │
+           │ 4. Observe Effects                   │
+           │    - Page changed?                  │
+           │    - New elements?                  │
+           │◄────────────────────────────────────│
+           │                                     │
+           └─────────────► Loop until done
 ```
+
+**Key Components:**
+
+**🤖 Agent (LangGraph + LLM):**
+- **Perceives:** Browser state (visual + textual)
+- **Thinks:** Plans next action using LLM reasoning
+- **Acts:** Executes browser actions (click, type, navigate)
+- **Maintains State:** Tracks history of actions and results as internal context
+
+**🌐 Environment (Browser):**
+- **State:** Current webpage (URL, content, elements)
+- **Dynamics:** Changes when agent takes actions
+- **Observations:** Provides feedback (screenshots, element lists)
+
+**🔄 Interaction Cycle:**
+1. Agent observes browser state
+2. Agent plans next action based on task goal
+3. Agent executes action in browser
+4. Browser state changes
+5. Loop repeats until task complete
+
+---
+
+### LangGraph Implementation
+
+![LangGraph State Graph](langgraph_diagram.png)
 
 ### Components
 
 **1. State (`BrowserAgentState` TypedDict)**
-- `messages` - LangGraph message history
-- `current_url`, `current_title`, `elements`, `screenshot` - Browser context
-- `task`, `memory`, `step_number`, `history_items` - Agent state
+- `messages` - LangGraph message history (tool calling protocol)
+- `current_url`, `current_title`, `elements`, `screenshot` - Browser observations
+- `task`, `memory`, `step_number`, `history_items` - Agent internal state
 - `is_done` - Completion flag
 
 **2. Graph Nodes**
-- `observe_browser` - Captures browser state
-- `agent_decide` - LLM chooses action via tool calling
-- `tools` - Executes browser action (LangGraph ToolNode)
-- `update_history` - Records results
+- `observe_browser` - Captures browser state (screenshot + elements)
+- `planning` - LLM plans next action via tool calling
+- `action` - Executes browser action (LangGraph ToolNode)
+- `update_history` - Records action results
 
-**3. Tools (8 Actions)**
+**3. Actions (8 Browser Tools)**
 1. `navigate(url)` - Go to URLs
 2. `click(index)` - Click with navigation detection
 3. `input_text(index, text)` - Type into fields
@@ -92,241 +148,6 @@ START → observe_browser → agent_decide → [done?]
 6. `scroll(down, pages)` - Scroll pages
 7. `screenshot()` - Capture screenshots
 8. `done(result, success)` - Complete task
-
----
-
-## 🔧 Usage
-
-### Basic Example
-
-```python
-import asyncio
-from openai import AsyncAzureOpenAI
-from simple_browser_agent.agent import LangGraphBrowserAgent
-
-async def main():
-    # Initialize Azure OpenAI
-    client = AsyncAzureOpenAI(
-        api_key="your-api-key",
-        api_version="2024-12-01-preview",
-        azure_endpoint="https://your-endpoint.openai.azure.com/"
-    )
-    
-    # Create agent
-    agent = LangGraphBrowserAgent(
-        task="Search Google for 'LangGraph tutorial' and click first result",
-        llm_client=client,
-        model="gpt-4o-mini",
-        headless=False,
-        max_steps=10,
-        api_version="2024-12-01-preview",
-        azure_endpoint="https://your-endpoint.openai.azure.com/",
-        api_key="your-api-key"
-    )
-    
-    # Run agent
-    result = await agent.run()
-    print(f"Result: {result}")
-
-asyncio.run(main())
-```
-
-### Advanced: Custom Graph Configuration
-
-```python
-from simple_browser_agent.agent import create_browser_agent_graph
-from simple_browser_agent.browser import SimpleBrowserSession
-
-# Create browser
-browser = SimpleBrowserSession(headless=False)
-await browser.start()
-
-# Create graph with custom config
-graph = create_browser_agent_graph(
-    browser=browser,
-    llm_client=client,
-    model="gpt-4o-mini",
-    api_version="2024-12-01-preview",
-    azure_endpoint="...",
-    api_key="..."
-)
-
-# Run with custom initial state
-initial_state = {
-    "messages": [],
-    "task": "Your task here",
-    "memory": "Starting fresh",
-    "step_number": 0,
-    "max_steps": 20,
-    "history_items": [],
-    "is_done": False,
-    "current_url": "",
-    "current_title": "",
-    "elements": "",
-    "screenshot": None,
-    "error": None
-}
-
-config = {"recursion_limit": 100}  # 20 steps * 5 nodes per step
-async for event in graph.astream(initial_state, config=config, stream_mode="values"):
-    print(f"Step: {event['step_number']}, URL: {event.get('current_url')}")
-```
-
----
-
-## 🔬 Technical Deep Dive
-
-### Shadow DOM Support
-
-Modern websites use Web Components with Shadow DOM. We handle this with recursive JavaScript traversal:
-
-```javascript
-function traverse(root) {
-    // Query Light DOM
-    const found = root.querySelectorAll('a, button, input, ...');
-    
-    // Process elements (get innerText, check visibility)
-    
-    // Traverse into Shadow DOM
-    root.querySelectorAll('*').forEach(el => {
-        if (el.shadowRoot) {
-            traverse(el.shadowRoot);  // Recursive!
-        }
-    });
-}
-```
-
-**Result:**
-- ✅ Sees elements inside Shadow DOM
-- ✅ Gets actual visible text (`innerText`)
-- ✅ Prioritizes product elements
-- ✅ Filters hidden elements
-
-### Rich Action Feedback
-
-The `click` tool detects what happened after clicking:
-
-```python
-# Before click: capture state
-state_before = {url, modalCount, cartText, bodyHash}
-
-# Perform click
-await browser.click(index)
-
-# After click: analyze changes
-if url_changed:
-    return "✅ Page navigated to {new_url}"
-elif modal_appeared:
-    return "✅ Modal/popup appeared"
-elif cart_changed:
-    return "✅ Cart updated (item added)"
-else:
-    return "⚠️ No obvious changes detected"
-```
-
-Agent learns from this detailed feedback!
-
-### Tool Factory Pattern
-
-Tools need browser and LLM context, achieved via closure:
-
-```python
-def create_browser_tools(browser, llm_client, model):
-    """Factory creates tools with context injected"""
-    
-    @tool
-    async def navigate(url: str) -> str:
-        await browser.navigate(url)  # Access via closure
-        return f"✅ Navigated to {url}"
-    
-    return [navigate, click, ...]
-```
-
----
-
-## 📊 Performance
-
-**Test Task:** Search Costco for "organic milk" and extract product info
-
-| Metric | Result |
-|--------|--------|
-| **Success Rate** | 100% |
-| **Steps to Complete** | 5 steps |
-| **Elements Found** | 100+ (Shadow DOM working) |
-| **Navigation Detection** | ✅ Working |
-| **Time** | ~15-20 seconds |
-
----
-
-## 🚀 Advanced Features
-
-### 1. Checkpointing (State Persistence)
-
-Save and resume long-running tasks:
-
-```python
-from langgraph.checkpoint.sqlite import SqliteSaver
-
-# Add checkpointer to graph
-memory = SqliteSaver.from_conn_string(":memory:")
-graph = graph_builder.compile(checkpointer=memory)
-
-# Run with thread_id for persistence
-config = {
-    "configurable": {"thread_id": "shopping-session-1"},
-    "recursion_limit": 100
-}
-async for event in graph.astream(initial_state, config=config):
-    # State automatically saved at each step
-    ...
-```
-
-### 2. Graph Visualization
-
-Visualize your agent's decision flow:
-
-```python
-from IPython.display import Image, display
-
-# Generate graph visualization
-display(Image(graph.get_graph().draw_mermaid_png()))
-```
-
-### 3. Custom System Prompt
-
-Modify agent behavior by customizing the prompt:
-
-```python
-# See prompts.py
-SYSTEM_PROMPT = """You are a browser automation agent...
-[Your custom instructions]
-"""
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Chrome won't start
-- Make sure Chrome/Chromium is installed
-- Check `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome` exists (macOS)
-
-### Missing API Key Error
-```
-OpenAIError: Missing credentials...
-```
-**Solution:** Pass `api_key` parameter to `LangGraphBrowserAgent`:
-```python
-agent = LangGraphBrowserAgent(..., api_key="your-api-key")
-```
-
-### Elements Not Found (0-1 elements)
-- Page may not have loaded yet - agent will scroll to trigger loading
-- Shadow DOM traversal activates after scrolling
-- Wait for "Found 100 interactive elements" message
-
-### Recursion Limit Error
-The agent uses `recursion_limit = max_steps * 5` (each step = ~4 graph nodes). If you increase `max_steps`, the limit adjusts automatically.
 
 ---
 
@@ -344,65 +165,3 @@ simple_browser_agent/
 ├── README.md          # This file
 └── CHANGELOG.md       # Recent changes
 
-Total: ~1,800 lines of production-ready code
-```
-
----
-
-## 💡 Key Design Decisions
-
-### 1. TypedDict vs Pydantic for State
-**Decision:** Use TypedDict  
-**Rationale:** LangGraph prefers TypedDict for better compatibility with reducers.
-
-### 2. Tool Factory Pattern
-**Decision:** Create tools via factory function  
-**Rationale:** Tools need browser context. Factory allows closure over browser instance.
-
-### 3. Removed site-specific `search_direct` tool
-**Decision:** Deleted (was only for Costco/Amazon/Google)  
-**Rationale:** Not general-purpose. Use `navigate` + `input_text` + `send_keys` instead.
-
-### 4. Recursion Limit = max_steps * 5
-**Decision:** Each step involves ~4 graph nodes  
-**Rationale:** Prevents recursion errors while allowing full task completion.
-
----
-
-## 🎓 Learn More
-
-- **LangGraph Documentation**: https://langchain-ai.github.io/langgraph/
-- **Tool Calling Guide**: https://python.langchain.com/docs/modules/agents/tools/
-- **State Management**: https://langchain-ai.github.io/langgraph/concepts/#state
-- **CDP Protocol**: https://chromedevtools.github.io/devtools-protocol/
-- **Shadow DOM**: https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM
-
----
-
-## 📄 License
-
-Educational use - based on the browser-use project (MIT License).
-
----
-
-## 🎉 Success!
-
-The LangGraph browser agent successfully:
-- ✅ Completes real-world web automation tasks
-- ✅ Handles Shadow DOM and modern web tech
-- ✅ Provides rich feedback for agent learning
-- ✅ Maintains structured history
-- ✅ Supports checkpointing and visualization
-- ✅ Production-ready architecture
-
-**Ready to automate?**
-
-```bash
-# Update credentials
-vim simple_browser_agent/demo_costco.py
-
-# Run the demo
-python3 simple_browser_agent/demo_costco.py
-```
-
-Watch the agent autonomously navigate, click, type, and complete complex multi-step tasks! 🚀

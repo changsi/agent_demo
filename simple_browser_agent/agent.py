@@ -14,14 +14,9 @@ from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 
-try:
-    from .browser import SimpleBrowserSession
-    from .tools import create_browser_tools
-    from .prompts import SYSTEM_PROMPT
-except ImportError:
-    from browser import SimpleBrowserSession
-    from tools import create_browser_tools
-    from prompts import SYSTEM_PROMPT
+from .browser import SimpleBrowserSession
+from .tools import create_browser_tools
+from .prompts import SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -143,18 +138,18 @@ What should you do next to complete this task: {state['task']}"""
 
 
 # ==============================================================
-# GRAPH NODE: AGENT DECIDE
+# GRAPH NODE: PLANNING
 # ==============================================================
 
-def create_agent_decide_node(llm_with_tools):
+def create_planning_node(llm_with_tools):
     """
-    Create the agent_decide node with LLM injected.
+    Create the planning node with LLM injected.
     
-    This node calls the LLM to decide what action to take next.
+    This node calls the LLM to plan what action to take next.
     """
-    async def agent_decide(state: BrowserAgentState) -> dict:
+    async def planning(state: BrowserAgentState) -> dict:
         """
-        Call LLM to decide next action using tool calling.
+        Call LLM to plan next action using tool calling.
         
         Returns dict with LLM's response message.
         """
@@ -175,7 +170,7 @@ def create_agent_decide_node(llm_with_tools):
         
         return {"messages": [response]}
     
-    return agent_decide
+    return planning
 
 
 # ==============================================================
@@ -242,12 +237,12 @@ async def update_history(state: BrowserAgentState) -> dict:
 # ROUTING FUNCTIONS
 # ==============================================================
 
-def should_continue(state: BrowserAgentState) -> Literal["tools", "done"]:
+def should_continue(state: BrowserAgentState) -> Literal["action", "done"]:
     """
-    Determine whether to continue with tools or end.
+    Determine whether to continue with action or end.
     
     Routes to:
-    - "tools" if LLM made a tool call and not done
+    - "action" if LLM made a tool call and not done
     - "done" if task complete or max steps reached
     """
     # Check if max steps reached
@@ -268,7 +263,7 @@ def should_continue(state: BrowserAgentState) -> Literal["tools", "done"]:
             if tool_name == "done":
                 logger.info("✅ Done tool called")
                 return "done"
-            return "tools"
+            return "action"
     
     # Default to done if no tool calls
     return "done"
@@ -327,8 +322,8 @@ def create_browser_agent_graph(
     logger.info("🏗️ Building LangGraph browser agent...")
     
     # Create browser tools
-    tools = create_browser_tools(browser, llm_client, model)
-    logger.info(f"✅ Created {len(tools)} browser tools")
+    browser_tools = create_browser_tools(browser, llm_client, model)
+    logger.info(f"✅ Created {len(browser_tools)} browser tools")
     
     # Create LLM with tools
     llm = AzureChatOpenAI(
@@ -337,43 +332,43 @@ def create_browser_agent_graph(
         azure_deployment=model,
         azure_endpoint=azure_endpoint
     )
-    llm_with_tools = llm.bind_tools(tools)
+    llm_with_tools = llm.bind_tools(browser_tools)
     logger.info(f"✅ LLM configured with tools")
     
-    # Create tool node
-    tools_node = ToolNode(tools)
+    # Create ToolNode for action execution
+    action_node = ToolNode(browser_tools)
     
     # Create graph nodes
     observe_browser = create_observe_browser_node(browser)
-    agent_decide = create_agent_decide_node(llm_with_tools)
+    planning = create_planning_node(llm_with_tools)
     
     # Build the graph
     graph_builder = StateGraph(BrowserAgentState)
     
     # Add nodes
     graph_builder.add_node("observe_browser", observe_browser)
-    graph_builder.add_node("agent_decide", agent_decide)
-    graph_builder.add_node("tools", tools_node)
+    graph_builder.add_node("planning", planning)
+    graph_builder.add_node("action", action_node)
     graph_builder.add_node("update_history", update_history)
     
     # Set entry point
     graph_builder.set_entry_point("observe_browser")
     
     # Add edges
-    graph_builder.add_edge("observe_browser", "agent_decide")
+    graph_builder.add_edge("observe_browser", "planning")
     
-    # Conditional edge after agent decides
+    # Conditional edge after planning
     graph_builder.add_conditional_edges(
-        "agent_decide",
+        "planning",
         should_continue,
         {
-            "tools": "tools",
+            "action": "action",
             "done": END
         }
     )
     
-    # After tools, update history
-    graph_builder.add_edge("tools", "update_history")
+    # After action, update history
+    graph_builder.add_edge("action", "update_history")
     
     # After history update, observe browser again (loop)
     graph_builder.add_edge("update_history", "observe_browser")
@@ -467,7 +462,7 @@ class LangGraphBrowserAgent:
             logger.info(f"{'='*70}\n")
             
             # Run graph with recursion limit
-            # Each step involves ~4 nodes: observe_browser → agent_decide → tools → update_history
+            # Each step involves ~4 nodes: observe_browser → planning → action → update_history
             # So recursion_limit needs to be at least (max_steps * 4) + buffer
             config = {"recursion_limit": self.max_steps * 5}  # 5x for safety margin
             final_state = None
