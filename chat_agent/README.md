@@ -112,7 +112,7 @@ class AgentState(TypedDict):
 ```python
 graph_builder = StateGraph(AgentState)
 graph_builder.add_node("observe_and_planning", observe_and_plan)
-graph_builder.add_node("action", tool_node)
+graph_builder.add_node("action", action_node)
 graph_builder.add_conditional_edges("observe_and_planning", tools_condition)
 graph_builder.add_edge("action", "observe_and_planning")
 ```

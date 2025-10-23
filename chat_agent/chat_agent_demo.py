@@ -94,7 +94,8 @@ tools = [get_weather]
 llm_with_tools = llm.bind_tools(tools)
 
 # The ToolNode is a prebuilt LangGraph node that executes tools.
-tool_node = ToolNode(tools)
+# We wrap it as action_node to represent action execution.
+action_node = ToolNode(tools)
 
 
 # --- 5. Define Graph Nodes ---
@@ -122,7 +123,7 @@ graph_builder = StateGraph(AgentState)
 
 # Add the two nodes to the graph
 graph_builder.add_node("observe_and_planning", observe_and_plan)
-graph_builder.add_node("action", tool_node)  # Execute actions (tool calls)
+graph_builder.add_node("action", action_node)  # Execute actions (tool calls)
 
 # The entry point is the "observe_and_planning" node
 graph_builder.set_entry_point("observe_and_planning")
