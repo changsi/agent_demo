@@ -561,27 +561,53 @@ class SimpleBrowserSession:
             return False
         
     async def input_text(self, index: int, text: str) -> bool:
-        """Input text into an element"""
-        js = f"""
-        (function() {{
-            const selector = 'input, textarea';
-            const elements = document.querySelectorAll(selector);
-            if (elements[{index}]) {{
-                elements[{index}].value = {json.dumps(text)};
-                elements[{index}].dispatchEvent(new Event('input', {{ bubbles: true }}));
-                return true;
-            }}
-            return false;
-        }})()
-        """
+        """Input text into an element using CDP and node_id from cache"""
+        if index not in self.element_cache:
+            logger.error(f"Element index {index} not found in cache")
+            return False
         
-        result = await self._send_command('Runtime.evaluate', {
-            'expression': js,
-            'returnByValue': True
-        }, session_id=self.session_id)
+        node_id = self.element_cache[index]
         
-        await asyncio.sleep(0.5)
-        return result.get('result', {}).get('value', False)
+        try:
+            # Use CDP DOM.focus to focus the element
+            await self._send_command('DOM.focus', {
+                'nodeId': node_id
+            }, session_id=self.session_id)
+            
+            await asyncio.sleep(0.1)
+            
+            # Clear existing text first (select all + delete)
+            await self._send_command('Input.dispatchKeyEvent', {
+                'type': 'keyDown',
+                'key': 'a',
+                'code': 'KeyA',
+                'modifiers': 2  # Control/Command modifier
+            }, session_id=self.session_id)
+            
+            await self._send_command('Input.dispatchKeyEvent', {
+                'type': 'keyUp',
+                'key': 'a',
+                'code': 'KeyA',
+                'modifiers': 2
+            }, session_id=self.session_id)
+            
+            await asyncio.sleep(0.05)
+            
+            # Type the new text character by character
+            for char in text:
+                await self._send_command('Input.dispatchKeyEvent', {
+                    'type': 'char',
+                    'text': char
+                }, session_id=self.session_id)
+                await asyncio.sleep(0.02)  # Small delay between characters
+            
+            await asyncio.sleep(0.2)
+            logger.info(f"✓ Typed '{text}' into element [{index}]")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Input text failed for element [{index}]: {e}")
+            return False
         
     async def extract_content(self) -> str:
         """Extract page text content"""
