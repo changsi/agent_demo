@@ -519,7 +519,33 @@ class SimpleBrowserSession:
         node_id = self.element_cache[index]
         
         try:
-            # Get the box model for the element
+            # CRITICAL: Scroll element into view first!
+            # Use CDP DOM.scrollIntoViewIfNeeded to ensure element is visible
+            try:
+                await self._send_command('DOM.scrollIntoViewIfNeeded', {
+                    'nodeId': node_id
+                }, session_id=self.session_id)
+                await asyncio.sleep(0.3)  # Wait for scroll animation
+                logger.debug(f"Scrolled element [{index}] into view")
+            except Exception as scroll_err:
+                # Fallback: use JavaScript scrollIntoView
+                logger.debug(f"CDP scroll failed, using JS fallback: {scroll_err}")
+                await self._send_command('Runtime.evaluate', {
+                    'expression': f'''
+                        (function() {{
+                            const node = document.querySelector('[data-node-id="{node_id}"]');
+                            if (node) {{
+                                node.scrollIntoView({{block: 'center', behavior: 'smooth'}});
+                                return true;
+                            }}
+                            return false;
+                        }})()
+                    ''',
+                    'returnByValue': True
+                }, session_id=self.session_id)
+                await asyncio.sleep(0.3)
+            
+            # Get the box model for the element (AFTER scrolling!)
             box_result = await self._send_command('DOM.getBoxModel', {
                 'nodeId': node_id
             }, session_id=self.session_id)
